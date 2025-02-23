@@ -1,3 +1,4 @@
+
 import { useState, useRef, useCallback, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -6,7 +7,7 @@ import { Mic, MicOff } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import SpeakerBadge from "./SpeakerBadge";
 import { TranscriptionWord, AudioState } from "@/types/transcription";
-import { startRecording, stopRecording, processTranscription } from "@/utils/audioUtils";
+import { startRecording, stopRecording, processTranscription, createDeepgramSocket } from "@/utils/audioUtils";
 import { cn } from "@/lib/utils";
 
 const AudioTranscriber = () => {
@@ -18,6 +19,7 @@ const AudioTranscriber = () => {
   });
   const [words, setWords] = useState<TranscriptionWord[]>([]);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const socketRef = useRef<WebSocket | null>(null);
   const { toast } = useToast();
 
   const handleApiKeySubmit = (e: React.FormEvent) => {
@@ -37,38 +39,46 @@ const AudioTranscriber = () => {
     try {
       const mediaRecorder = await startRecording();
       mediaRecorderRef.current = mediaRecorder;
-      setAudioState(prev => ({ ...prev, isRecording: true, error: null }));
+      
+      // Create WebSocket connection
+      const socket = createDeepgramSocket(apiKey);
+      socketRef.current = socket;
 
-      mediaRecorder.ondataavailable = async (event) => {
-        if (event.data.size > 0) {
-          const formData = new FormData();
-          formData.append("audio", event.data, "audio.webm");
+      socket.onopen = () => {
+        console.log("WebSocket connection established");
+        setAudioState(prev => ({ ...prev, isRecording: true, error: null }));
+      };
 
-          try {
-            const response = await fetch("https://api.deepgram.com/v1/listen?model=nova-2&diarize=true&filler_words=true", {
-              method: "POST",
-              headers: {
-                Authorization: `Token ${apiKey}`,
-              },
-              body: event.data,
-            });
-
-            if (!response.ok) {
-              throw new Error(`Deepgram API error: ${response.statusText}`);
-            }
-
-            const data = await response.json();
-            console.log("Deepgram response:", data);
+      socket.onmessage = (message) => {
+        try {
+          const data = JSON.parse(message.data);
+          console.log("Received transcription:", data);
+          if (data.is_final) {
             const newWords = processTranscription(data);
             setWords(prev => [...prev, ...newWords]);
-          } catch (error) {
-            console.error("Transcription error:", error);
-            setAudioState(prev => ({ ...prev, error: error.message }));
           }
+        } catch (error) {
+          console.error("Error processing message:", error);
         }
       };
 
-      mediaRecorder.start(1000);
+      socket.onerror = (error) => {
+        console.error("WebSocket error:", error);
+        setAudioState(prev => ({ ...prev, error: "WebSocket connection error" }));
+      };
+
+      socket.onclose = () => {
+        console.log("WebSocket connection closed");
+      };
+
+      // Send audio data to WebSocket
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0 && socket.readyState === WebSocket.OPEN) {
+          socket.send(event.data);
+        }
+      };
+
+      mediaRecorder.start(250); // Send chunks every 250ms
     } catch (error) {
       console.error("Error starting recording:", error);
       setAudioState(prev => ({ ...prev, error: error.message }));
@@ -78,14 +88,21 @@ const AudioTranscriber = () => {
   const stopTranscription = useCallback(() => {
     if (mediaRecorderRef.current) {
       stopRecording(mediaRecorderRef.current);
-      setAudioState(prev => ({ ...prev, isRecording: false }));
     }
+    if (socketRef.current) {
+      socketRef.current.close();
+      socketRef.current = null;
+    }
+    setAudioState(prev => ({ ...prev, isRecording: false }));
   }, []);
 
   useEffect(() => {
     return () => {
       if (mediaRecorderRef.current) {
         stopRecording(mediaRecorderRef.current);
+      }
+      if (socketRef.current) {
+        socketRef.current.close();
       }
     };
   }, []);

@@ -13,7 +13,8 @@ export const checkIsFiller = (word: string): boolean => {
 export const startRecording = async (): Promise<MediaRecorder> => {
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    const mediaRecorder = new MediaRecorder(stream);
+    const options = { mimeType: 'audio/webm' };
+    const mediaRecorder = new MediaRecorder(stream, options);
     console.log("Recording started successfully");
     return mediaRecorder;
   } catch (error) {
@@ -28,20 +29,29 @@ export const stopRecording = (mediaRecorder: MediaRecorder) => {
   console.log("Recording stopped");
 };
 
+export const createDeepgramSocket = (apiKey: string): WebSocket => {
+  const socket = new WebSocket(`wss://api.deepgram.com/v1/listen?model=nova-2&diarize=true&filler_words=true`, [
+    'token',
+    apiKey,
+  ]);
+  
+  return socket;
+};
+
 export const processTranscription = (result: any): TranscriptionWord[] => {
   try {
-    if (!result?.results?.[0]?.alternatives?.[0]?.words) {
+    if (!result?.channel?.alternatives?.[0]?.words) {
       console.error("Invalid transcription result format:", result);
       return [];
     }
 
-    return result.results[0].alternatives[0].words.map((word: any) => ({
-      word: word.word,
+    return result.channel.alternatives[0].words.map((word: any) => ({
+      word: word.word || word.punctuated_word,
       start: word.start,
       end: word.end,
       speaker: word.speaker || 0,
       confidence: word.confidence || 1,
-      isFiller: checkIsFiller(word.word)
+      isFiller: checkIsFiller(word.word || word.punctuated_word)
     }));
   } catch (error) {
     console.error("Error processing transcription:", error);
