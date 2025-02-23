@@ -8,13 +8,6 @@ export interface TranscriptionWord {
   isFiller: boolean;
 }
 
-export interface GroupedTranscription {
-  [key: number]: {
-    transcript: string;
-    words: TranscriptionWord[];
-  }
-}
-
 export interface TranscriptionResult {
   words: TranscriptionWord[];
   error?: string;
