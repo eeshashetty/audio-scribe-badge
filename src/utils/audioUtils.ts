@@ -29,29 +29,29 @@ export const stopRecording = (mediaRecorder: MediaRecorder) => {
   console.log("Recording stopped");
 };
 
-export const createDeepgramSocket = (apiKey: string): WebSocket => {
-  const socket = new WebSocket(`wss://api.deepgram.com/v1/listen?model=nova-2&diarize=true&filler_words=true`, [
-    'token',
-    apiKey,
-  ]);
-  
+export const createAssemblyAISocket = (apiKey: string): WebSocket => {
+  const socket = new WebSocket('wss://api.assemblyai.com/v2/realtime/ws?sample_rate=16000', {
+    headers: {
+      Authorization: apiKey
+    }
+  });
   return socket;
 };
 
 export const processTranscription = (result: any): TranscriptionWord[] => {
   try {
-    if (!result?.channel?.alternatives?.[0]?.words) {
+    if (!result?.words) {
       console.error("Invalid transcription result format:", result);
       return [];
     }
 
-    return result.channel.alternatives[0].words.map((word: any) => ({
-      word: word.word || word.punctuated_word,
+    return result.words.map((word: any) => ({
+      word: word.text,
       start: word.start,
       end: word.end,
       speaker: word.speaker || 0,
       confidence: word.confidence || 1,
-      isFiller: checkIsFiller(word.word || word.punctuated_word)
+      isFiller: checkIsFiller(word.text)
     }));
   } catch (error) {
     console.error("Error processing transcription:", error);

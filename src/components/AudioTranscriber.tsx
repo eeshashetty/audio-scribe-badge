@@ -1,14 +1,12 @@
+
 import { useState, useRef, useCallback, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Mic, MicOff } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
-import SpeakerBadge from "./SpeakerBadge";
-import { TranscriptionWord, AudioState, GroupedTranscription } from "@/types/transcription";
-import { startRecording, stopRecording, processTranscription, createDeepgramSocket } from "@/utils/audioUtils";
-import { cn } from "@/lib/utils";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { TranscriptionWord, AudioState } from "@/types/transcription";
+import { startRecording, stopRecording, processTranscription, createAssemblyAISocket } from "@/utils/audioUtils";
 
 const AudioTranscriber = () => {
   const [apiKey, setApiKey] = useState("");
@@ -18,33 +16,9 @@ const AudioTranscriber = () => {
     hasApiKey: false,
   });
   const [words, setWords] = useState<TranscriptionWord[]>([]);
-  const [groupedTranscriptions, setGroupedTranscriptions] = useState<GroupedTranscription>({});
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
   const { toast } = useToast();
-
-  const groupWordsBySpeaker = (words: TranscriptionWord[]): GroupedTranscription => {
-    const grouped: GroupedTranscription = {};
-    words.forEach((word) => {
-      if (!grouped[word.speaker]) {
-        grouped[word.speaker] = {
-          transcript: word.word,
-          words: [word]
-        };
-      } else {
-        grouped[word.speaker].transcript += " " + word.word;
-        grouped[word.speaker].words.push(word);
-      }
-    });
-    console.log('Grouped transcriptions:', grouped); // Added console.log
-    return grouped;
-  };
-
-  useEffect(() => {
-    const grouped = groupWordsBySpeaker(words);
-    console.log('Updated grouped transcriptions:', grouped); // Added console.log
-    setGroupedTranscriptions(grouped);
-  }, [words]);
 
   const handleApiKeySubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -64,11 +38,14 @@ const AudioTranscriber = () => {
       const mediaRecorder = await startRecording();
       mediaRecorderRef.current = mediaRecorder;
       
-      const socket = createDeepgramSocket(apiKey);
+      const socket = createAssemblyAISocket(apiKey);
       socketRef.current = socket;
 
       socket.onopen = () => {
         console.log("WebSocket connection established");
+        socket.send(JSON.stringify({ 
+          audio_data: "" 
+        }));
         setAudioState(prev => ({ ...prev, isRecording: true, error: null }));
       };
 
@@ -76,7 +53,7 @@ const AudioTranscriber = () => {
         try {
           const data = JSON.parse(message.data);
           console.log("Received transcription:", data);
-          if (data.is_final) {
+          if (data.message_type === "FinalTranscript") {
             const newWords = processTranscription(data);
             setWords(prev => [...prev, ...newWords]);
           }
@@ -94,13 +71,18 @@ const AudioTranscriber = () => {
         console.log("WebSocket connection closed");
       };
 
-      mediaRecorder.ondataavailable = (event) => {
+      mediaRecorder.ondataavailable = async (event) => {
         if (event.data.size > 0 && socket.readyState === WebSocket.OPEN) {
-          socket.send(event.data);
+          const arrayBuffer = await event.data.arrayBuffer();
+          const float32Array = new Float32Array(arrayBuffer);
+          const base64Audio = btoa(String.fromCharCode.apply(null, new Uint8Array(arrayBuffer)));
+          socket.send(JSON.stringify({
+            audio_data: base64Audio
+          }));
         }
       };
 
-      mediaRecorder.start(250);
+      mediaRecorder.start(100);
     } catch (error) {
       console.error("Error starting recording:", error);
       setAudioState(prev => ({ ...prev, error: error.message }));
@@ -133,7 +115,7 @@ const AudioTranscriber = () => {
     return (
       <Card className="p-6 max-w-md mx-auto mt-10 backdrop-blur-sm bg-white/90">
         <form onSubmit={handleApiKeySubmit} className="space-y-4">
-          <h2 className="text-xl font-semibold text-center mb-4">Enter Your Deepgram API Key</h2>
+          <h2 className="text-xl font-semibold text-center mb-4">Enter Your AssemblyAI API Key</h2>
           <Input
             type="password"
             value={apiKey}
