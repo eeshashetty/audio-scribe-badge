@@ -30,11 +30,7 @@ export const stopRecording = (mediaRecorder: MediaRecorder) => {
 };
 
 export const createAssemblyAISocket = (apiKey: string): WebSocket => {
-  const socket = new WebSocket('wss://api.assemblyai.com/v2/realtime/ws?sample_rate=16000', {
-    headers: {
-      Authorization: apiKey
-    }
-  });
+  const socket = new WebSocket(`wss://api.assemblyai.com/v2/realtime/ws?sample_rate=16000&authorization=${apiKey}`);
   return socket;
 };
 
