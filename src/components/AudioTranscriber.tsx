@@ -170,7 +170,7 @@ const AudioTranscriber = () => {
                   className="mr-2"
                 />
               )}
-              {word.word}
+              {word.word} ({index})
             </span>
           ))}
           {audioState.isRecording && words.length === 0 && (
@@ -186,3 +186,4 @@ const AudioTranscriber = () => {
 };
 
 export default AudioTranscriber;
+
