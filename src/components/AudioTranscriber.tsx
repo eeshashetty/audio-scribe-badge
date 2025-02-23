@@ -37,11 +37,14 @@ const AudioTranscriber = () => {
         grouped[word.speaker].words.push(word);
       }
     });
+    console.log('Grouped transcriptions:', grouped); // Added console.log
     return grouped;
   };
 
   useEffect(() => {
-    setGroupedTranscriptions(groupWordsBySpeaker(words));
+    const grouped = groupWordsBySpeaker(words);
+    console.log('Updated grouped transcriptions:', grouped); // Added console.log
+    setGroupedTranscriptions(grouped);
   }, [words]);
 
   const handleApiKeySubmit = (e: React.FormEvent) => {
