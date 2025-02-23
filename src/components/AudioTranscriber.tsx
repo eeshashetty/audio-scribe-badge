@@ -1,24 +1,27 @@
 
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Mic, MicOff } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
-import { TranscriptionWord, AudioState } from "@/types/transcription";
-import { startRecording, stopRecording, processTranscription, createAssemblyAISocket } from "@/utils/audioUtils";
+import { TranscriptionWord } from "@/types/transcription";
+import { processTranscription } from "@/utils/audioUtils";
+import { useAudioRecording } from "@/hooks/useAudioRecording";
+import ApiKeyForm from "./ApiKeyForm";
+import TranscriptionDisplay from "./TranscriptionDisplay";
 
 const AudioTranscriber = () => {
   const [apiKey, setApiKey] = useState("");
-  const [audioState, setAudioState] = useState<AudioState>({
-    isRecording: false,
-    error: null,
-    hasApiKey: false,
-  });
   const [words, setWords] = useState<TranscriptionWord[]>([]);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const socketRef = useRef<WebSocket | null>(null);
   const { toast } = useToast();
+  
+  const {
+    audioState,
+    setAudioState,
+    socketRef,
+    startTranscription,
+    stopTranscription
+  } = useAudioRecording(apiKey);
 
   const handleApiKeySubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -33,23 +36,9 @@ const AudioTranscriber = () => {
     });
   };
 
-  const startTranscription = useCallback(async () => {
-    try {
-      const mediaRecorder = await startRecording();
-      mediaRecorderRef.current = mediaRecorder;
-      
-      const socket = createAssemblyAISocket(apiKey);
-      socketRef.current = socket;
-
-      socket.onopen = () => {
-        console.log("WebSocket connection established");
-        socket.send(JSON.stringify({ 
-          audio_data: "" 
-        }));
-        setAudioState(prev => ({ ...prev, isRecording: true, error: null }));
-      };
-
-      socket.onmessage = (message) => {
+  useEffect(() => {
+    if (socketRef.current) {
+      socketRef.current.onmessage = (message) => {
         try {
           const data = JSON.parse(message.data);
           console.log("Received transcription:", data);
@@ -62,75 +51,31 @@ const AudioTranscriber = () => {
         }
       };
 
-      socket.onerror = (error) => {
+      socketRef.current.onerror = (error) => {
         console.error("WebSocket error:", error);
         setAudioState(prev => ({ ...prev, error: "WebSocket connection error" }));
       };
 
-      socket.onclose = () => {
+      socketRef.current.onclose = () => {
         console.log("WebSocket connection closed");
       };
-
-      mediaRecorder.ondataavailable = async (event) => {
-        if (event.data.size > 0 && socket.readyState === WebSocket.OPEN) {
-          const arrayBuffer = await event.data.arrayBuffer();
-          const float32Array = new Float32Array(arrayBuffer);
-          const base64Audio = btoa(String.fromCharCode.apply(null, new Uint8Array(arrayBuffer)));
-          socket.send(JSON.stringify({
-            audio_data: base64Audio
-          }));
-        }
-      };
-
-      mediaRecorder.start(100);
-    } catch (error) {
-      console.error("Error starting recording:", error);
-      setAudioState(prev => ({ ...prev, error: error.message }));
     }
-  }, [apiKey]);
-
-  const stopTranscription = useCallback(() => {
-    if (mediaRecorderRef.current) {
-      stopRecording(mediaRecorderRef.current);
-    }
-    if (socketRef.current) {
-      socketRef.current.close();
-      socketRef.current = null;
-    }
-    setAudioState(prev => ({ ...prev, isRecording: false }));
-  }, []);
+  }, [socketRef.current]);
 
   useEffect(() => {
     return () => {
-      if (mediaRecorderRef.current) {
-        stopRecording(mediaRecorderRef.current);
-      }
-      if (socketRef.current) {
-        socketRef.current.close();
-      }
+      stopTranscription();
     };
-  }, []);
+  }, [stopTranscription]);
 
   if (!audioState.hasApiKey) {
     return (
-      <Card className="p-6 max-w-md mx-auto mt-10 backdrop-blur-sm bg-white/90">
-        <form onSubmit={handleApiKeySubmit} className="space-y-4">
-          <h2 className="text-xl font-semibold text-center mb-4">Enter Your AssemblyAI API Key</h2>
-          <Input
-            type="password"
-            value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
-            placeholder="Enter your API key"
-            className="w-full"
-          />
-          {audioState.error && (
-            <p className="text-red-500 text-sm">{audioState.error}</p>
-          )}
-          <Button type="submit" className="w-full">
-            Save API Key
-          </Button>
-        </form>
-      </Card>
+      <ApiKeyForm
+        apiKey={apiKey}
+        setApiKey={setApiKey}
+        onSubmit={handleApiKeySubmit}
+        error={audioState.error}
+      />
     );
   }
 
@@ -158,23 +103,10 @@ const AudioTranscriber = () => {
           </div>
         )}
 
-        <div className="space-y-4">
-          {words.map((word, index) => (
-            <div key={index} className="inline-block mr-2">
-              <span className="text-gray-800">{word.word}</span>
-              <span className="ml-1 text-xs text-gray-500">
-                (Speaker {word.speaker})
-              </span>
-            </div>
-          ))}
-        </div>
-
-        {audioState.isRecording && words.length === 0 && (
-          <div className="text-gray-500 animate-pulse">Listening...</div>
-        )}
-        {!audioState.isRecording && words.length === 0 && (
-          <div className="text-gray-500">Click the start button to begin transcription</div>
-        )}
+        <TranscriptionDisplay 
+          words={words}
+          isRecording={audioState.isRecording}
+        />
       </Card>
     </div>
   );
