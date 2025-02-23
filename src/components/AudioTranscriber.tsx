@@ -1,4 +1,3 @@
-
 import { useState, useRef, useCallback, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,6 +7,7 @@ import { useToast } from "@/components/ui/use-toast";
 import SpeakerBadge from "./SpeakerBadge";
 import { TranscriptionWord, AudioState } from "@/types/transcription";
 import { startRecording, stopRecording, processTranscription } from "@/utils/audioUtils";
+import { cn } from "@/lib/utils";
 
 const AudioTranscriber = () => {
   const [apiKey, setApiKey] = useState("");
