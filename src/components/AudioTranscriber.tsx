@@ -1,4 +1,3 @@
-
 import { useState, useRef, useCallback, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -177,28 +176,21 @@ const AudioTranscriber = () => {
           </div>
         )}
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {Object.entries(groupedTranscriptions).map(([speakerId, data]) => (
-            <Dialog key={speakerId}>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle className="flex items-center gap-2">
-                    <SpeakerBadge speakerId={parseInt(speakerId)} />
-                    Speaker {speakerId}
-                  </DialogTitle>
-                </DialogHeader>
-                <div className="p-4 bg-gray-50 rounded-lg">
-                  <p className="text-gray-800">{data.transcript}</p>
-                </div>
-              </DialogContent>
-            </Dialog>
+        <div className="space-y-4">
+          {words.map((word, index) => (
+            <div key={index} className="inline-block mr-2">
+              <span className="text-gray-800">{word.word}</span>
+              <span className="ml-1 text-xs text-gray-500">
+                (Speaker {word.speaker})
+              </span>
+            </div>
           ))}
         </div>
 
-        {audioState.isRecording && Object.keys(groupedTranscriptions).length === 0 && (
+        {audioState.isRecording && words.length === 0 && (
           <div className="text-gray-500 animate-pulse">Listening...</div>
         )}
-        {!audioState.isRecording && Object.keys(groupedTranscriptions).length === 0 && (
+        {!audioState.isRecording && words.length === 0 && (
           <div className="text-gray-500">Click the start button to begin transcription</div>
         )}
       </Card>
