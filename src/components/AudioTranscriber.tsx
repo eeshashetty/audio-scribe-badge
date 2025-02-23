@@ -6,10 +6,9 @@ import { Input } from "@/components/ui/input";
 import { Mic, MicOff } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import SpeakerBadge from "./SpeakerBadge";
-import { TranscriptionWord, AudioState, GroupedTranscription } from "@/types/transcription";
+import { TranscriptionWord, AudioState } from "@/types/transcription";
 import { startRecording, stopRecording, processTranscription, createDeepgramSocket } from "@/utils/audioUtils";
 import { cn } from "@/lib/utils";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 const AudioTranscriber = () => {
   const [apiKey, setApiKey] = useState("");
@@ -19,33 +18,9 @@ const AudioTranscriber = () => {
     hasApiKey: false,
   });
   const [words, setWords] = useState<TranscriptionWord[]>([]);
-  const [groupedTranscriptions, setGroupedTranscriptions] = useState<GroupedTranscription>({});
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
   const { toast } = useToast();
-
-  const groupWordsBySpeaker = (words: TranscriptionWord[]): GroupedTranscription => {
-    const grouped: GroupedTranscription = {};
-    words.forEach((word) => {
-      if (!grouped[word.speaker]) {
-        grouped[word.speaker] = {
-          transcript: word.word,
-          words: [word]
-        };
-      } else {
-        grouped[word.speaker].transcript += " " + word.word;
-        grouped[word.speaker].words.push(word);
-      }
-    });
-    console.log('Grouped transcriptions:', grouped); // Added console.log
-    return grouped;
-  };
-
-  useEffect(() => {
-    const grouped = groupWordsBySpeaker(words);
-    console.log('Updated grouped transcriptions:', grouped); // Added console.log
-    setGroupedTranscriptions(grouped);
-  }, [words]);
 
   const handleApiKeySubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -65,6 +40,7 @@ const AudioTranscriber = () => {
       const mediaRecorder = await startRecording();
       mediaRecorderRef.current = mediaRecorder;
       
+      // Create WebSocket connection
       const socket = createDeepgramSocket(apiKey);
       socketRef.current = socket;
 
@@ -95,13 +71,14 @@ const AudioTranscriber = () => {
         console.log("WebSocket connection closed");
       };
 
+      // Send audio data to WebSocket
       mediaRecorder.ondataavailable = (event) => {
         if (event.data.size > 0 && socket.readyState === WebSocket.OPEN) {
           socket.send(event.data);
         }
       };
 
-      mediaRecorder.start(250);
+      mediaRecorder.start(250); // Send chunks every 250ms
     } catch (error) {
       console.error("Error starting recording:", error);
       setAudioState(prev => ({ ...prev, error: error.message }));
@@ -177,30 +154,32 @@ const AudioTranscriber = () => {
           </div>
         )}
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {Object.entries(groupedTranscriptions).map(([speakerId, data]) => (
-            <Dialog key={speakerId}>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle className="flex items-center gap-2">
-                    <SpeakerBadge speakerId={parseInt(speakerId)} />
-                    Speaker {speakerId}
-                  </DialogTitle>
-                </DialogHeader>
-                <div className="p-4 bg-gray-50 rounded-lg">
-                  <p className="text-gray-800">{data.transcript}</p>
-                </div>
-              </DialogContent>
-            </Dialog>
+        <div className="min-h-[200px] max-h-[400px] overflow-y-auto p-4 bg-transcript-bg rounded-lg border border-transcript-border">
+          {words.map((word, index) => (
+            <span
+              key={`${word.word}-${index}`}
+              className={cn(
+                "inline-block mr-1",
+                word.isFiller && "text-purple-600 font-medium",
+                "transition-all duration-200"
+              )}
+            >
+              {index > 0 && words[index - 1].speaker !== word.speaker && (
+                <SpeakerBadge
+                  speakerId={word.speaker}
+                  className="mr-2"
+                />
+              )}
+              {word.word}
+            </span>
           ))}
+          {audioState.isRecording && words.length === 0 && (
+            <div className="text-gray-500 animate-pulse">Listening...</div>
+          )}
+          {!audioState.isRecording && words.length === 0 && (
+            <div className="text-gray-500">Click the start button to begin transcription</div>
+          )}
         </div>
-
-        {audioState.isRecording && Object.keys(groupedTranscriptions).length === 0 && (
-          <div className="text-gray-500 animate-pulse">Listening...</div>
-        )}
-        {!audioState.isRecording && Object.keys(groupedTranscriptions).length === 0 && (
-          <div className="text-gray-500">Click the start button to begin transcription</div>
-        )}
       </Card>
     </div>
   );
