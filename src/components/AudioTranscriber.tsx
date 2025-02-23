@@ -29,21 +29,21 @@ const AudioTranscriber = () => {
     words.forEach((word) => {
       if (!grouped[word.speaker]) {
         grouped[word.speaker] = {
-          transcript: word.word,
+          transcript: `${word.word} (${word.speaker})`,
           words: [word]
         };
       } else {
-        grouped[word.speaker].transcript += " " + word.word;
+        grouped[word.speaker].transcript += ` ${word.word} (${word.speaker})`;
         grouped[word.speaker].words.push(word);
       }
     });
-    console.log('Grouped transcriptions:', grouped); // Added console.log
+    console.log('Grouped transcriptions:', grouped);
     return grouped;
   };
 
   useEffect(() => {
     const grouped = groupWordsBySpeaker(words);
-    console.log('Updated grouped transcriptions:', grouped); // Added console.log
+    console.log('Updated grouped transcriptions:', grouped);
     setGroupedTranscriptions(grouped);
   }, [words]);
 
